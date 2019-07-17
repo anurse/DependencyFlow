@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <OpenApiReference Include="OpenAPIs\swagger.json">
+    <OpenApiReference Include="OpenAPIs\swagger.json" Namespace="DependencyFlow.Maestro" Options="$(OpenApiGenerateCodeOptions)">
       <CodeGenerator>NSwagCSharp</CodeGenerator>
       <SourceUri>https://maestro-int.westus2.cloudapp.azure.com/api/swagger.json</SourceUri>
     </OpenApiReference>

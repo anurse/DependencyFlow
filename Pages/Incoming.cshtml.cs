@@ -10,7 +10,8 @@ namespace DependencyFlow.Pages
 {
     public class IncomingModel : PageModel
     {
-        private static readonly Regex _repoParser = new Regex(@"https?://(www\.)?github.com/(?<owner>[A-Za-z0-9-_\.]+)/(?<repo>[A-Za-z0-9-_\.]+)");
+        private static readonly Regex _gitHubRepoParser = new Regex(@"https?://(www\.)?github.com/(?<owner>[A-Za-z0-9-_\.]+)/(?<repo>[A-Za-z0-9-_\.]+)");
+        private static readonly Regex _azDoRepoParser = new Regex(@"https?://dev.azure.com/dnceng/internal/_git/(?<repo>[A-Za-z0-9-_\.]+)");
         private readonly swaggerClient _client;
         private readonly GitHubClient _github;
 
@@ -36,27 +37,51 @@ namespace DependencyFlow.Pages
             {
                 var build = graph.Builds[dep.BuildId.ToString()];
 
-                GitHubInfo gitHubInfo = null;
+                RepoIdentity identity;
                 if (!string.IsNullOrEmpty(build.GitHubRepository))
                 {
-                    var match = _repoParser.Match(build.GitHubRepository);
+                    var match = _gitHubRepoParser.Match(build.GitHubRepository);
                     if (match.Success)
                     {
-                        gitHubInfo = new GitHubInfo()
+                        identity = new RepoIdentity()
                         {
                             Owner = match.Groups["owner"].Value,
-                            Repo = match.Groups["repo"].Value
+                            Repo = match.Groups["repo"].Value,
+                            Url = build.GitHubRepository,
+                            IsGitHub = true,
                         };
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    var match = _azDoRepoParser.Match(build.AzureDevOpsRepository);
+                    if(match.Success)
+                    {
+                        identity = new RepoIdentity()
+                        {
+                            Owner = "dnceng",
+                            Repo = match.Groups["repo"].Value,
+                            Url = build.AzureDevOpsRepository,
+                            IsGitHub = false,
+                        };
+
+                    } else
+                    {
+                        continue;
                     }
                 }
 
                 incoming.Add(new IncomingRepo()
                 {
                     Build = build,
-                    ShortName = gitHubInfo?.Repo,
+                    Identity = identity,
                     CommitUrl = GetCommitUrl(build),
                     BuildUrl = $"https://dev.azure.com/{build.AzureDevOpsAccount}/{build.AzureDevOpsProject}/_build/results?buildId={build.AzureDevOpsBuildId}&view=results",
-                    CommitDistance = gitHubInfo == null ? null : await ComputeCommitsBehindAsync(gitHubInfo, build)
+                    CommitDistance = await ComputeCommitsBehindAsync(identity, build)
                 });
             }
             IncomingRepositories = incoming;
@@ -73,9 +98,14 @@ namespace DependencyFlow.Pages
             return $"{build.AzureDevOpsRepository}/commits?itemPath=%2F&itemVersion=GC{build.Commit}";;
         }
 
-        private async Task<int?> ComputeCommitsBehindAsync(GitHubInfo gitHubInfo, Build build)
+        private async Task<int?> ComputeCommitsBehindAsync(RepoIdentity identity, Build build)
         {
-            var comparison = await _github.Repository.Commit.Compare(gitHubInfo.Owner, gitHubInfo.Repo, build.Commit, build.GitHubBranch);
+            if(!identity.IsGitHub)
+            {
+                return null;
+            }
+
+            var comparison = await _github.Repository.Commit.Compare(identity.Owner, identity.Repo, build.Commit, build.GitHubBranch);
 
             // We're using the branch as the "head" so "ahead by" is actually how far the branch (i.e. "master") is
             // ahead of the commit. So it's also how far **behind** the commit is from the branch head.
@@ -86,15 +116,17 @@ namespace DependencyFlow.Pages
     public class IncomingRepo
     {
         public Build Build { get; set; }
-        public string ShortName { get; set; }
+        public RepoIdentity Identity { get; set; }
         public int? CommitDistance { get; set; }
         public string CommitUrl { get; set; }
         public string BuildUrl { get; set; }
     }
 
-    public class GitHubInfo
+    public class RepoIdentity
     {
         public string Owner { get; set; }
         public string Repo { get; set; }
+        public string Url { get; set; }
+        public bool IsGitHub { get; set; }
     }
 }

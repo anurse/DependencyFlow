@@ -1,9 +1,11 @@
+using System;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
 using Octokit;
 
@@ -23,27 +25,24 @@ namespace DependencyFlow
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddHttpClient<swaggerClient>(client =>
+            services.AddHttpClient<swaggerClient>((services, client) =>
             {
-                var authToken = Configuration["AuthToken"];
+                var authToken = Configuration["Maestro:Token"];
+                if(string.IsNullOrEmpty(authToken))
+                {
+                    throw new InvalidOperationException("Missing required configuration option 'Maestro:Token'");
+                }
                 client.DefaultRequestHeaders.Add(HeaderNames.UserAgent, UserAgentValue);
                 client.DefaultRequestHeaders.Add(
                     HeaderNames.Authorization, 
                     new AuthenticationHeaderValue("Bearer", authToken).ToString());
             });
 
-            services.AddScoped((_) =>
-            {
-                var authToken = Configuration["GitHubToken"];
-                var client = new GitHubClient(new Octokit.ProductHeaderValue(UserAgentValue));
-                if (!string.IsNullOrEmpty(authToken))
-                {
-                    client.Credentials = new Credentials(authToken);
-                }
-                return client;
-            });
-
+            services.AddOctokit(Configuration.GetSection("GitHub"));
             services.AddRazorPages();
+
+            // Load site options
+            services.Configure<DependencyFlowOptions>(Configuration.GetSection("DependencyFlow"));
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

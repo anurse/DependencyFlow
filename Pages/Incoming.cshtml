@@ -1,6 +1,10 @@
 ﻿@page "/incoming/{channelId}/{repo}"
 @model IncomingModel
 
+@{
+    ViewData["Title"] = "Incoming";
+}
+
 <div class="card-deck">
     @{ 
         var index = 0;
@@ -24,7 +28,7 @@
         else if (elapsed.TotalDays < 7)
         {
             conditionClass = "bg-warning";
-            textClass = null;
+            textClass = "text-dark";
             linkClass = null;
         }
         else
@@ -33,11 +37,19 @@
         }
 
         <div class="card @textClass @conditionClass m-1">
-            <div class="card-header">@incoming.ShortName</div>
+            <div class="card-header"><a href="@incoming.Identity.Url" target="_blank" class="@linkClass">@incoming.Identity.Repo</a></div>
             <div class="card-body">
-                <h5 class="card-title">
-                    @(incoming.CommitDistance == 0 ? "✔" : $"{incoming.CommitDistance} commit behind")
-                </h5>
+                @if (incoming.CommitDistance == null)
+                {
+                    <h5 class="card-title">Unknown commit distance.</h5>
+                } else if(incoming.CommitDistance == 0)
+                {
+                    <h5 class="card-title">✔ up to date!</h5>
+                }
+                else
+                {
+                    <h5 class="card-title">@incoming.CommitDistance commits behind.</h5>
+                }
                 <p class="card-text"><a class="@linkClass" target="_blank" href="@incoming.BuildUrl">Build @incoming.Build.AzureDevOpsBuildNumber</a></p>
                 <p class="card-text">@incoming.Build.DateProduced.Humanize()</p>
             </div>
